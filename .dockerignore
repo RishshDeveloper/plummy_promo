@@ -10,10 +10,10 @@ venv/
 env/
 ENV/
 
-# База данных (будет создана в контейнере)
-*.db
+# База данных
 *.db-journal
-
+bot_database_backup_*.db
+# Разрешаем основную БД для деплоя
 !bot_database.db
 
 # Логи
