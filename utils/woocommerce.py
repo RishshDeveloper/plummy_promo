@@ -4,15 +4,19 @@
 
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List
 import httpx
 from woocommerce import API
 import logging
+import pytz
 
 from .config import Config
 
 logger = logging.getLogger(__name__)
+
+# Московский часовой пояс
+MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
 
 class WooCommerceManager:
@@ -43,7 +47,8 @@ class WooCommerceManager:
     
     async def create_coupon(self, coupon_code: str, user_id: int, 
                            discount_percent: int = None, 
-                           usage_limit: int = 1) -> Dict[str, Any]:
+                           usage_limit: int = 1,
+                           username: str = None) -> Dict[str, Any]:
         """
         Создать купон в WooCommerce
         
@@ -52,6 +57,7 @@ class WooCommerceManager:
             user_id: ID пользователя Telegram
             discount_percent: Процент скидки
             usage_limit: Лимит использований
+            username: Юзернейм пользователя Telegram
             
         Returns:
             Информация о созданном купоне
@@ -61,12 +67,21 @@ class WooCommerceManager:
         
         discount_percent = discount_percent or Config.PROMO_DISCOUNT_PERCENT
         
+        # Получаем срок действия из настроек БД
+        expiry_date = await self._get_expiry_date()
+        
+        # Форматируем описание с юзернеймом и датой создания
+        moscow_now = datetime.now(MOSCOW_TZ)
+        creation_date = moscow_now.strftime("%d.%m.%Y %H:%M")
+        user_info = f"@{username}" if username else f"ID: {user_id}"
+        description = f"Купон для {user_info} | Создан: {creation_date}"
+        
         # Данные для создания купона
         coupon_data = {
             "code": coupon_code,
             "discount_type": "percent",  # Процентная скидка
             "amount": str(discount_percent),
-            "description": f"Купон создан через Telegram бота для пользователя {user_id}",
+            "description": description,
             "usage_limit": usage_limit,
             "usage_limit_per_user": 1,
             "limit_usage_to_x_items": None,
@@ -75,7 +90,7 @@ class WooCommerceManager:
             "exclude_sale_items": False,  # Можно использовать на товары со скидкой
             "minimum_amount": "0.00",  # Минимальная сумма заказа
             "maximum_amount": "",  # Максимальная сумма заказа
-            "date_expires": self._get_expiry_date(),  # Срок действия (30 дней)
+            "date_expires": expiry_date,  # Срок действия из настроек БД
             "email_restrictions": [],
             "meta_data": [
                 {
@@ -83,12 +98,16 @@ class WooCommerceManager:
                     "value": str(user_id)
                 },
                 {
+                    "key": "_telegram_username",
+                    "value": username or ""
+                },
+                {
                     "key": "_created_via_telegram_bot",
                     "value": "true"
                 },
                 {
                     "key": "_creation_date",
-                    "value": datetime.now().isoformat()
+                    "value": moscow_now.isoformat()
                 }
             ]
         }
@@ -302,17 +321,28 @@ class WooCommerceManager:
             logger.error(f"Исключение при получении статистики купонов: {str(e)}")
             return {"enabled": True, "error": str(e)}
     
-    def _get_expiry_date(self, days: int = 30) -> str:
+    async def _get_expiry_date(self, days: int = None) -> str:
         """
-        Получить дату истечения купона
+        Получить дату истечения купона из настроек БД (московское время)
         
         Args:
-            days: Через сколько дней истекает
+            days: Через сколько дней истекает (если None, берется из БД)
             
         Returns:
             Дата в формате ISO
         """
-        expiry_date = datetime.now() + timedelta(days=days)
+        if days is None:
+            # Получаем срок из настроек БД
+            try:
+                from database.database import db
+                days = await db.settings.get_promo_duration_days()
+            except Exception as e:
+                logger.error(f"Ошибка получения срока действия из БД: {e}")
+                days = 7  # По умолчанию 7 дней при ошибке
+        
+        # Используем московское время
+        moscow_now = datetime.now(MOSCOW_TZ)
+        expiry_date = moscow_now + timedelta(days=days)
         return expiry_date.strftime("%Y-%m-%dT%H:%M:%S")
     
     async def sync_coupon_status(self, coupon_code: str, woocommerce_id: int = None) -> Dict[str, Any]:
