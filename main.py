@@ -11,6 +11,7 @@ PlummyPromo Telegram Bot
 
 import asyncio
 import logging
+import os
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
 # Импортируем наши модули
@@ -18,6 +19,13 @@ from utils.config import Config
 from database.database import db
 from handlers.user import UserHandlers
 from handlers.admin import AdminHandlers
+
+# Health-check сервер для облачных платформ
+try:
+    from healthcheck import start_health_check_server
+    HEALTHCHECK_ENABLED = True
+except ImportError:
+    HEALTHCHECK_ENABLED = False
 from utils.monitoring import SiteMonitoring
 from utils.notifications import PromoNotificationSystem, notification_system
 
@@ -117,6 +125,11 @@ class PlummyPromoBot:
 async def main():
     """Главная асинхронная функция"""
     try:
+        # Запуск health-check сервера для облачных платформ
+        if HEALTHCHECK_ENABLED:
+            port = int(os.getenv('PORT', 8080))
+            start_health_check_server(port)
+        
         # Проверяем конфигурацию
         Config.validate()
         

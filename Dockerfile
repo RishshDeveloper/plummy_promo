@@ -24,6 +24,10 @@ RUN mkdir -p /app/data
 # Переменные окружения по умолчанию (могут быть переопределены)
 ENV PYTHONUNBUFFERED=1
 ENV DATABASE_URL=sqlite:///bot_database.db
+ENV PORT=8080
+
+# Открываем порт (требуется для облачных платформ)
+EXPOSE 8080
 
 # Скрипт инициализации и запуска
 RUN echo '#!/bin/bash\n\
