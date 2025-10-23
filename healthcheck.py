@@ -25,9 +25,13 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 def start_health_check_server(port=8080):
     """Запуск health-check сервера в отдельном потоке"""
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    print(f"✅ Health-check сервер запущен на порту {port}")
-    return server
+    try:
+        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        print(f"✅ Health-check сервер запущен на порту {port}")
+        return server
+    except Exception as e:
+        print(f"⚠️ Ошибка запуска health-check сервера: {e}")
+        raise
 

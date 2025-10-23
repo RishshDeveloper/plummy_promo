@@ -19,6 +19,8 @@ from utils.config import Config
 from database.database import db
 from handlers.user import UserHandlers
 from handlers.admin import AdminHandlers
+from utils.monitoring import SiteMonitoring
+from utils.notifications import PromoNotificationSystem, notification_system
 
 # Health-check сервер для облачных платформ
 try:
@@ -26,8 +28,6 @@ try:
     HEALTHCHECK_ENABLED = True
 except ImportError:
     HEALTHCHECK_ENABLED = False
-from utils.monitoring import SiteMonitoring
-from utils.notifications import PromoNotificationSystem, notification_system
 
 
 # Настройка логирования
@@ -125,12 +125,19 @@ class PlummyPromoBot:
 async def main():
     """Главная асинхронная функция"""
     try:
+        logger.info("🚀 Запуск PlummyPromo Bot...")
+        
         # Запуск health-check сервера для облачных платформ
         if HEALTHCHECK_ENABLED:
-            port = int(os.getenv('PORT', 8080))
-            start_health_check_server(port)
+            try:
+                port = int(os.getenv('PORT', 8080))
+                start_health_check_server(port)
+                logger.info(f"✅ Health-check сервер запущен на порту {port}")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось запустить health-check сервер: {e}")
         
         # Проверяем конфигурацию
+        logger.info("🔧 Проверка конфигурации...")
         Config.validate()
         
         # Инициализируем базу данных
@@ -227,9 +234,12 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n👋 До свидания!")
     except Exception as e:
+        logger.error(f"❌ Критическая ошибка запуска: {e}", exc_info=True)
         print(f"❌ Ошибка запуска: {e}")
         print("\n🔧 Проверьте:")
-        print("1. Создан ли .env файл с правильными данными")
-        print("2. Установлены ли все зависимости (pip install -r requirements.txt)")
-        print("3. Правильный ли BOT_TOKEN в .env файле")
+        print("1. Установлены ли переменные окружения (BOT_TOKEN, ADMIN_ID)")
+        print("2. Установлены ли все зависимости")
+        print("3. Правильный ли BOT_TOKEN")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
