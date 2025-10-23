@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# База данных (будет создана в контейнере)
+*.db
+*.db-journal
+
+# Логи
+*.log
+
+# Environment files (используйте переменные окружения в облаке)
+.env
+.env.backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Backups
+*.backup
+*_backup_*
+
+# Temporary files
+temp_*
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+

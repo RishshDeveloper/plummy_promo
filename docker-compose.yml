@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  plummy-bot:
+    build: .
+    container_name: plummy-promo-bot
+    restart: unless-stopped
+    environment:
+      # Telegram Bot
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID}
+      
+      # Database
+      - DATABASE_URL=sqlite:///bot_database.db
+      
+      # Shop Settings
+      - SHOP_NAME=${SHOP_NAME:-PlummyPromo}
+      - SHOP_URL=${SHOP_URL:-https://plummy.ru}
+      - PROMO_DISCOUNT_PERCENT=${PROMO_DISCOUNT_PERCENT:-13}
+      
+      # WooCommerce
+      - WOOCOMMERCE_URL=${WOOCOMMERCE_URL}
+      - WOOCOMMERCE_CONSUMER_KEY=${WOOCOMMERCE_CONSUMER_KEY}
+      - WOOCOMMERCE_CONSUMER_SECRET=${WOOCOMMERCE_CONSUMER_SECRET}
+      - WOOCOMMERCE_API_VERSION=${WOOCOMMERCE_API_VERSION:-wc/v3}
+      - WOOCOMMERCE_ENABLED=${WOOCOMMERCE_ENABLED:-true}
+      
+      # UptimeRobot
+      - UPTIMEROBOT_API_KEY=${UPTIMEROBOT_API_KEY}
+      - UPTIMEROBOT_ENABLED=${UPTIMEROBOT_ENABLED:-false}
+      - UPTIMEROBOT_CHECK_INTERVAL=${UPTIMEROBOT_CHECK_INTERVAL:-60}
+      
+      # Broadcast
+      - BROADCAST_ENABLED=${BROADCAST_ENABLED:-true}
+    
+    volumes:
+      # Сохраняем базу данных на хосте
+      - ./data:/app/data
+      - ./bot_database.db:/app/bot_database.db
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
