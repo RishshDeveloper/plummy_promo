@@ -127,7 +127,7 @@ class DatabaseManager:
             
             # Настройки по умолчанию
             default_settings = {
-                'promo_discount_percent': '13',  # 13% скидка
+                'promo_discount_percent': '5',  # 5% скидка
                 'promo_duration_days': '7'       # 7 дней действие
             }
             
@@ -227,7 +227,7 @@ class PromoCode:
         self.db = db_manager
         self._settings = None  # Будет инициализирован при первом обращении
     
-    async def create_promo_code(self, user_id: int, discount_percent: int = None) -> str:
+    async def create_promo_code(self, user_id: int, discount_percent: int = None, username: str = None) -> str:
         """Создать новый промокод для пользователя с интеграцией в WooCommerce"""
         # Если процент скидки не указан, получаем из настроек
         if discount_percent is None:
@@ -244,7 +244,7 @@ class PromoCode:
                 existing = await cursor.fetchone()
                 if existing:
                     # Если код существует, генерируем новый
-                    return await self.create_promo_code(user_id, discount_percent)
+                    return await self.create_promo_code(user_id, discount_percent, username)
             
             # Создаем промокод локально сначала
             await db.execute("""
@@ -257,7 +257,7 @@ class PromoCode:
             
         # Пытаемся создать купон в WooCommerce 
         try:
-            woo_result = await self._create_woocommerce_coupon(code, user_id, discount_percent)
+            woo_result = await self._create_woocommerce_coupon(code, user_id, discount_percent, username)
             
             # Обновляем статус синхронизации
             async with aiosqlite.connect(self.db.db_path) as db:
@@ -293,7 +293,7 @@ class PromoCode:
         
         return code
     
-    async def _create_woocommerce_coupon(self, code: str, user_id: int, discount_percent: int) -> Dict[str, Any]:
+    async def _create_woocommerce_coupon(self, code: str, user_id: int, discount_percent: int, username: str = None) -> Dict[str, Any]:
         """Создать купон в WooCommerce"""
         try:
             # Импортируем WooCommerce менеджер
@@ -310,7 +310,8 @@ class PromoCode:
                 coupon_code=code,
                 user_id=user_id,
                 discount_percent=discount_percent,
-                usage_limit=1
+                usage_limit=1,
+                username=username
             )
             
             return result
@@ -415,8 +416,13 @@ class PromoCode:
                 
                 user_id, discount_percent = promo_info
                 
+                # Получаем username пользователя
+                async with db.execute("SELECT username FROM users WHERE user_id = ?", (user_id,)) as cursor:
+                    user_result = await cursor.fetchone()
+                    username = user_result[0] if user_result else None
+                
                 # Пытаемся создать купон в WooCommerce
-                woo_result = await self._create_woocommerce_coupon(code, user_id, discount_percent)
+                woo_result = await self._create_woocommerce_coupon(code, user_id, discount_percent, username)
                 
                 if woo_result["success"]:
                     await db.execute("""

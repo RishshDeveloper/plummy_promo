@@ -198,12 +198,11 @@ class UserHandlers:
                         # Есть действующие промокоды, показываем первый
                         active_code, expiry_date = valid_active_codes[0]
                         expiry_formatted = expiry_date.strftime("%d.%m.%Y в %H:%M")
+                        discount_percent = active_code.get('discount_percent', 5)
                         
-                        message_text = f"""У вас уже есть активный промокод!
+                        message_text = f"""У вас уже есть активный промокод на {discount_percent}%!
 
 Код: <code>{active_code['code']}</code>
-
-При его применении, мы полностью уберем нашу комиссию и вы заплатите только за расходы на выкуп + логистику.
 
 Истекает: {expiry_formatted}
 
@@ -223,7 +222,8 @@ class UserHandlers:
                 # У пользователя нет промокодов, создаем первый
                 try:
                     promo_code = await db.promo.create_promo_code(
-                        user_id=user.id
+                        user_id=user.id,
+                        username=user.username
                         # discount_percent будет взят из настроек базы данных
                     )
                     
@@ -322,9 +322,7 @@ class UserHandlers:
             action_type='faq_view'
         )
         
-        faq_text = """<b>Какая выгода давать промокод на заказ без комиссии?</b>
-
-Мы запустились недавно, хотим привлечь новых клиентов, показать, что через нас удобно покупать. Поэтому сейчас выполняем заказы по промокоду в ноль.
+        faq_text = """<b><a href="https://yandex.ru/profile/35414701593">Отзывы</a></b>
 
 <b>В каталоге нет того, что я хочу заказать</b>
 

@@ -548,6 +548,147 @@ class WooCommerceManager:
         except Exception as e:
             logger.error(f"Ошибка получения даты истечения промокода {coupon_code}: {str(e)}")
             return None
+    
+    async def update_coupon_description(self, coupon_code: str, username: str) -> Dict[str, Any]:
+        """
+        Обновить описание купона, заменив ID на username
+        
+        Args:
+            coupon_code: Код купона
+            username: Username пользователя Telegram
+            
+        Returns:
+            Результат операции
+        """
+        if not self.is_enabled():
+            return {
+                "success": False,
+                "error": "WooCommerce интеграция отключена"
+            }
+        
+        try:
+            # Находим купон
+            coupon_info = await self.get_coupon(coupon_code)
+            if not coupon_info:
+                return {
+                    "success": False,
+                    "error": f"Купон {coupon_code} не найден"
+                }
+            
+            coupon_id = coupon_info["id"]
+            current_description = coupon_info.get("description", "")
+            
+            # Извлекаем дату создания из текущего описания, если она есть
+            creation_date = None
+            if "Создан:" in current_description:
+                # Извлекаем дату после "Создан:"
+                import re
+                match = re.search(r'Создан: ([\d.:\s]+)', current_description)
+                if match:
+                    creation_date = match.group(1)
+            
+            # Если дата не найдена, используем текущую дату
+            if not creation_date:
+                moscow_now = datetime.now(MOSCOW_TZ)
+                creation_date = moscow_now.strftime("%d.%m.%Y %H:%M")
+            
+            # Формируем новое описание с username
+            user_info = f"@{username}" if username else "Неизвестный пользователь"
+            new_description = f"Купон для {user_info} | Создан: {creation_date}"
+            
+            # Обновляем купон
+            update_data = {
+                "description": new_description
+            }
+            
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.api.put(f"coupons/{coupon_id}", update_data)
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"✅ Описание купона {coupon_code} обновлено на: {new_description}")
+                return {
+                    "success": True,
+                    "message": f"Описание купона {coupon_code} обновлено"
+                }
+            else:
+                error_msg = f"HTTP {response.status_code}"
+                try:
+                    error_details = response.json()
+                    if "message" in error_details:
+                        error_msg = error_details["message"]
+                except:
+                    pass
+                
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
+                
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении описания купона {coupon_code}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def get_all_bot_coupons(self, per_page: int = 100) -> List[Dict[str, Any]]:
+        """
+        Получить все купоны, созданные ботом
+        
+        Args:
+            per_page: Количество купонов на страницу (максимум 100)
+            
+        Returns:
+            Список купонов
+        """
+        if not self.is_enabled():
+            return []
+        
+        try:
+            all_coupons = []
+            page = 1
+            
+            while True:
+                # Создаем функцию для текущей страницы
+                def get_coupons_page(current_page=page):
+                    return self.api.get("coupons", params={
+                        "per_page": per_page,
+                        "page": current_page
+                    })
+                
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    get_coupons_page
+                )
+                
+                if response.status_code == 200:
+                    coupons = response.json()
+                    if not coupons:
+                        break
+                    
+                    # Фильтруем только купоны бота (начинаются с plummy, регистр не важен)
+                    bot_coupons = [c for c in coupons if c.get("code", "").lower().startswith("plummy")]
+                    all_coupons.extend(bot_coupons)
+                    
+                    logger.info(f"📄 Страница {page}: найдено {len(bot_coupons)} купонов бота из {len(coupons)}")
+                    
+                    # Если купонов меньше чем per_page, значит это последняя страница
+                    if len(coupons) < per_page:
+                        break
+                    
+                    page += 1
+                else:
+                    logger.error(f"Ошибка получения купонов: {response.status_code}")
+                    break
+            
+            logger.info(f"📊 Всего найдено купонов бота: {len(all_coupons)}")
+            return all_coupons
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении всех купонов бота: {str(e)}", exc_info=True)
+            return []
 
 
 # Создаем экземпляр менеджера
