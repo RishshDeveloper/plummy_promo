@@ -135,6 +135,8 @@ class PromoNotificationSystem:
         """Получить все активные промокоды"""
         try:
             async with db.manager.get_connection() as conn:
+                # ЖЕСТКАЯ ПРОВЕРКА: получаем только промокоды созданные после 17.11.2025
+                # чтобы не трогать старые промокоды, по которым уведомления уже отправлялись
                 cursor = await conn.execute("""
                     SELECT p.*, u.notifications_enabled, u.is_blocked
                     FROM promocodes p
@@ -142,6 +144,7 @@ class PromoNotificationSystem:
                     WHERE p.is_used = 0 
                     AND u.notifications_enabled = 1 
                     AND u.is_blocked = 0
+                    AND p.created_date > '2025-11-17 00:00:00'
                     ORDER BY p.created_date ASC
                 """)
                 rows = await cursor.fetchall()
@@ -225,8 +228,25 @@ class PromoNotificationSystem:
                 
                 # Время для отправки уведомления пришло?
                 if datetime.now() >= notification_date:
+                    # ТРОЙНАЯ ПРОВЕРКА: проверяем в БД прямо перед отправкой
+                    sent_field = notification_config['field_sent']
+                    date_field = notification_config['field_date']
+                    
+                    async with db.manager.get_connection() as conn:
+                        check_cursor = await conn.execute(f"""
+                            SELECT {sent_field}, {date_field}
+                            FROM promocodes 
+                            WHERE code = ?
+                        """, (promo['code'],))
+                        check_row = await check_cursor.fetchone()
+                        
+                        # Если уже отправлено (флаг = 1 ИЛИ дата заполнена) - пропускаем
+                        if check_row and (check_row[0] == 1 or check_row[1] is not None):
+                            logger.info(f"⚠️ Уведомление (за {days_before} дн.) для промокода {promo['code']} уже отправлено, пропускаем")
+                            continue
+                    
                     # Проверяем, не отправляли ли уже это уведомление
-                    if not promo[notification_config['field_sent']]:
+                    if not promo[sent_field]:
                         # Отправляем уведомление
                         success = await self._send_notification(
                             promo,
@@ -238,8 +258,8 @@ class PromoNotificationSystem:
                             # Помечаем как отправленное
                             await self._mark_notification_sent(
                                 promo['code'],
-                                notification_config['field_sent'],
-                                notification_config['field_date']
+                                sent_field,
+                                date_field
                             )
                             notifications_sent += 1
             
@@ -376,14 +396,19 @@ class PromoNotificationSystem:
         
         try:
             async with db.manager.get_connection() as conn:
-                # Получаем промокоды, которые истекли и не были использованы
-                # и для которых еще не запрашивалась обратная связь
+                # ЖЕСТКАЯ ПРОВЕРКА: Получаем промокоды, которые:
+                # 1. Истекли и не были использованы
+                # 2. feedback_requested = 0 (не запрашивалась обратная связь)
+                # 3. feedback_request_date IS NULL (никогда не отправлялась)
+                # 4. Созданы ПОСЛЕ 17.11.2025 (чтобы не трогать старые)
                 cursor = await conn.execute("""
                     SELECT p.*, u.notifications_enabled, u.is_blocked
                     FROM promocodes p
                     JOIN users u ON p.user_id = u.user_id
                     WHERE p.is_used = 0 
                     AND p.feedback_requested = 0
+                    AND p.feedback_request_date IS NULL
+                    AND p.created_date > '2025-11-17 00:00:00'
                     AND u.notifications_enabled = 1 
                     AND u.is_blocked = 0
                     ORDER BY p.created_date ASC
@@ -403,6 +428,18 @@ class PromoNotificationSystem:
                 
                 for promo in expired_promos:
                     try:
+                        # ДВОЙНАЯ ПРОВЕРКА: проверяем в БД прямо перед отправкой
+                        check_cursor = await conn.execute("""
+                            SELECT feedback_requested, feedback_request_date 
+                            FROM promocodes 
+                            WHERE code = ?
+                        """, (promo['code'],))
+                        check_row = await check_cursor.fetchone()
+                        
+                        if check_row and (check_row[0] == 1 or check_row[1] is not None):
+                            logger.warning(f"⚠️ Промокод {promo['code']} уже получал запрос обратной связи, пропускаем")
+                            continue
+                        
                         # Проверяем, действительно ли промокод истек
                         created_date = datetime.strptime(promo['created_date'][:19], "%Y-%m-%d %H:%M:%S")
                         duration_days = await db.settings.get_promo_duration_days()
