@@ -238,11 +238,12 @@ class UserHandlers:
                     expiry_date = datetime.now() + timedelta(days=duration_days)
                     expiry_formatted = expiry_date.strftime("%d.%m.%Y в %H:%M")
                     
-                    message_text = f"""🎉 Ваш персональный промокод готов!
+                    # Получаем процент скидки
+                    discount_percent = await db.settings.get_promo_discount_percent()
+                    
+                    message_text = f"""🎉 Ваш персональный промокод на {discount_percent}% готов!
 
 Код: <code>{promo_code}</code>
-
-При его применении, мы полностью уберем нашу комиссию и вы заплатите только за расходы на выкуп + логистику.
 
 Истекает: {expiry_formatted}
 
